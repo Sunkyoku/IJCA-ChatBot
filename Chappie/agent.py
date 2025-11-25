@@ -1,10 +1,36 @@
+import sqlite3
 from google.adk.agents import Agent
 
-root_agent = Agent (
+# ========= Conectar a tabela e listar colunas =========
+
+def listar_tabelas(db_path: str):
+    connection = sqlite3.connect(db_path)
+    cursor = connection.cursor()
+    
+    query = """
+    SELECT name 
+    FROM sqlite_master 
+    WHERE type='table'
+    AND name NOT LIKE 'sqlite_%';
+    """
+
+    cursor.execute(query)
+    tabelas = [row[0] for row in cursor.fetchall()]
+    
+    connection.close()
+    return tabelas
+
+# ========= Agent =========
+
+DB_PATH = "./medallion/gold/acidentes_datatran2025.db"
+
+tabelas = listar_tabelas(DB_PATH)
+
+root_agent = Agent(
     name='Chappie',
     model='gemini-2.0-flash',
     description='Agent Analista de Dados',
-    instruction=""" 
+    instruction=f""" 
     Você é um Analista de Dados sênior, altamente técnico, objetivo e orientado a resultados.
     Sua missão é transformar dados brutos em insights claros, acionáveis e mensuráveis.
     
@@ -32,5 +58,9 @@ root_agent = Agent (
     Recomendações Diretas.
     Nunca invente dados.
     Se algo não puder ser concluído, declare objetivamente a limitação.
+    
+    -----------------
+    Bancos de dados disponíveis: {tabelas}
     """
-    )
+)
+
