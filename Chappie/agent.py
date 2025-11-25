@@ -1,35 +1,49 @@
 import sqlite3
 from google.adk.agents import Agent
 
-# ========= Conectar a tabela e listar colunas =========
+DB_PATH = "./medallion/gold/acidentes.db"
+
+def executar_query(sql: str):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute(sql)
+        resultado = cursor.fetchall()
+        colunas = [desc[0] for desc in cursor.description] if cursor.description else []
+        return {
+            "colunas": colunas,
+            "linhas": resultado
+        }
+    except Exception as e:
+        return {"erro": str(e)}
+    finally:
+        conn.close()
+
 
 def listar_tabelas(db_path: str):
-    connection = sqlite3.connect(db_path)
-    cursor = connection.cursor()
-    
-    query = """
-    SELECT name 
-    FROM sqlite_master 
-    WHERE type='table'
-    AND name NOT LIKE 'sqlite_%';
-    """
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
 
-    cursor.execute(query)
+    cursor.execute("""
+        SELECT name 
+        FROM sqlite_master 
+        WHERE type='table'
+        AND name NOT LIKE 'sqlite_%';
+    """)
     tabelas = [row[0] for row in cursor.fetchall()]
-    
-    connection.close()
+
+    conn.close()
     return tabelas
 
-# ========= Agent =========
-
-DB_PATH = "./medallion/gold/acidentes_datatran2025.db"
 
 tabelas = listar_tabelas(DB_PATH)
 
 root_agent = Agent(
     name='Chappie',
-    model='gemini-2.0-flash',
+    model='gemini-2.5-pro',
     description='Agent Analista de Dados',
+    tools=[executar_query],
     instruction=f""" 
     Você é um Analista de Dados sênior, altamente técnico, objetivo e orientado a resultados.
     Sua missão é transformar dados brutos em insights claros, acionáveis e mensuráveis.
