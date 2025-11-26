@@ -41,7 +41,7 @@ tabelas = listar_tabelas(DB_PATH)
 
 root_agent = Agent(
     name='Chappie',
-    model='gemini-2.5-pro',
+    model='gemini-2.5-flash',
     description='Agent Analista de Dados',
     tools=[executar_query],
     instruction=f""" 
@@ -74,7 +74,27 @@ root_agent = Agent(
     Se algo não puder ser concluído, declare objetivamente a limitação.
     
     -----------------
+    REGRAS CRÍTICAS DE GRANULARIDADE:
+    
+    A tabela contém dados granulares por **PESSOA/ENVOLVIDO**, e não por acidente consolidado.
+    Isso significa que um único acidente (ID único) gera múltiplas linhas (uma para cada pessoa envolvida).
+    
+    Siga estritamente estas fórmulas para evitar erros de cálculo:
+    
+    1. Para contar QUANTIDADE DE ACIDENTES:
+       - NUNCA use `COUNT(*)`.
+       - USE SEMPRE: `COUNT(DISTINCT id_acidente)`
+    
+    2. Para contar QUANTIDADE DE PESSOAS/VÍTIMAS:
+       - Pode usar `COUNT(*)` (cada linha é uma pessoa).
+       
+    3. Para somar MORTOS ou FERIDOS:
+       - Cuidado com colunas repetidas!
+       - Se a pergunta for "Total de mortos", verifique se existe uma coluna qualitativa (ex: `estado_fisico` ou `classificacao`) e conte as linhas onde o valor indica óbito.
+       - Exemplo SQL Seguro: `SELECT COUNT(*) FROM acidentes WHERE estado_fisico LIKE '%Óbito%'`
+       - SE for usar colunas numéricas (ex: `mortos`), certifique-se de não somar o mesmo valor repetido para o mesmo ID. Use: `SELECT SUM(mortos) FROM (SELECT DISTINCT id_acidente, mortos FROM acidentes)`
+    
+    -----------------
     Bancos de dados disponíveis: {tabelas}
     """
 )
-
