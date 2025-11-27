@@ -3,6 +3,7 @@ from google.adk.agents import Agent
 
 DB_PATH = "./medallion/gold/acidentes.db"
 
+
 def executar_query(sql: str):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
@@ -41,7 +42,7 @@ tabelas = listar_tabelas(DB_PATH)
 
 root_agent = Agent(
     name='Chappie',
-    model='gemini-2.5-flash',
+    model='gemini-2.5-pro',
     description='Agent Analista de Dados',
     tools=[executar_query],
     instruction=f""" 
@@ -64,6 +65,39 @@ root_agent = Agent(
     Sugestões de decisões práticas baseadas nos dados.
     
     -----------------
+    # --- CONTEXTO DO BANCO DE DADOS (CRÍTICO) ---
+    Tabela principal: **acidentes**
+    Colunas Principais:
+    - id (INTEGER)
+    - data_inversa (TEXT, YYYY-MM-DD)
+    - tipo_pista (TEXT) -> Valores comuns: 'Simples', 'Dupla', 'Múltipla'
+    - tracado_via (TEXT) -> Valores: 'Reta', 'Curva', 'Interseção de vias'
+    - uso_solo (TEXT) -> Valores: 'Urbano', 'Rural'
+    - tipo_acidente (TEXT)
+    # ... (outras colunas)
+    
+    -----------------
+    # --- MAPEAMENTO DE DOMÍNIO (VOCABULÁRIO) ---
+    O usuário pode usar termos coloquiais. Traduza para os valores do banco:
+    * Se o usuário disser "Pista Dupla", busque por `tipo_pista LIKE '%Dupla%'`.
+    * Se o usuário disser "Batida de frente", busque por `tipo_acidente LIKE '%Frontal%'`.
+    * Se o usuário disser "Atropelamento", busque por `tipo_acidente LIKE '%Atropelamento%'`.
+
+    -----------------
+    # --- REGRAS DE SQL RESILIENTE (PARA EVITAR ZERO RESULTADOS) ---
+    1. JAMAIS use igualdade exata (`=`) para colunas de texto (String), a menos que tenha certeza absoluta do valor.
+       - ERRADO: `WHERE tipo_pista = 'Pista Dupla'`
+       - CERTO: `WHERE tipo_pista LIKE '%Dupla%'`
+    
+    2. Antes de aplicar um filtro restritivo, se você não tem certeza do valor exato, verifique os valores existentes.
+       - Estratégia: Se a busca retornar 0, tente buscar sem o filtro ou usando uma palavra-chave mais ampla.
+
+    3. Se o resultado for 0 para uma categoria, NÃO responda apenas "0".
+       - Responda: "Não encontrei registros exatos para 'X'. No banco, as categorias disponíveis parecidas são A, B e C. Gostaria que eu buscasse por elas?"
+    
+    -----------------
+    Formato de resposta obrigatória:
+    
     Sempre entregue os resultados neste formato:
     Resumo Executivo (em poucas linhas).
     Principais Descobertas (bullet points claros).
@@ -72,29 +106,15 @@ root_agent = Agent(
     Recomendações Diretas.
     Nunca invente dados.
     Se algo não puder ser concluído, declare objetivamente a limitação.
-    
-    -----------------
-    REGRAS CRÍTICAS DE GRANULARIDADE:
-    
-    A tabela contém dados granulares por **PESSOA/ENVOLVIDO**, e não por acidente consolidado.
-    Isso significa que um único acidente (ID único) gera múltiplas linhas (uma para cada pessoa envolvida).
-    
-    Siga estritamente estas fórmulas para evitar erros de cálculo:
-    
-    1. Para contar QUANTIDADE DE ACIDENTES:
-       - NUNCA use `COUNT(*)`.
-       - USE SEMPRE: `COUNT(DISTINCT id_acidente)`
-    
-    2. Para contar QUANTIDADE DE PESSOAS/VÍTIMAS:
-       - Pode usar `COUNT(*)` (cada linha é uma pessoa).
-       
-    3. Para somar MORTOS ou FERIDOS:
-       - Cuidado com colunas repetidas!
-       - Se a pergunta for "Total de mortos", verifique se existe uma coluna qualitativa (ex: `estado_fisico` ou `classificacao`) e conte as linhas onde o valor indica óbito.
-       - Exemplo SQL Seguro: `SELECT COUNT(*) FROM acidentes WHERE estado_fisico LIKE '%Óbito%'`
-       - SE for usar colunas numéricas (ex: `mortos`), certifique-se de não somar o mesmo valor repetido para o mesmo ID. Use: `SELECT SUM(mortos) FROM (SELECT DISTINCT id_acidente, mortos FROM acidentes)`
-    
+
+    Regras obrigatórias
+    Sempre que for responder com números:
+        -execute uma query Sql real usando executar_query.
+        -Nunca estime ou suponha valores.
+        -Se não conseguir executar SQL, responda: "Não foi possivel validar os dados diretamente."
+
     -----------------
     Bancos de dados disponíveis: {tabelas}
     """
 )
+
